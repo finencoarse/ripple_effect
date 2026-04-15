@@ -35,7 +35,9 @@ This program uses POSIX libraries (Linux/Mac). If you are on Windows, you must r
 Because the game uses multithreading for the real-time clock, you must compile with the `-lpthread` flag:
 ```bash
 gcc test.c -o ripple_game -lpthread
+./ripple_game
 ```
+
 ## Multiplayer Guide
 The game uses raw TCP sockets on Port 8888.
 * To play with a friend on the SAME Wi-Fi (or localhost):
@@ -43,6 +45,15 @@ Player 1 selects Host Multiplayer Game.
 Player 2 selects Join Multiplayer Game.
 Player 2 types in Player 1's local IPv4 Address (e.g., 192.168.1.5 or 10.x.x.x). (If testing on the same computer, type 127.0.0.1).
 
+> **Note:** For users who don't know how to find their own IPv4 address, try in linux terminal
+> ```bash
+> hostname -I
+> ```
+> or simply try
+> ```bash
+> ipconfig
+> ```
+> in Windows CMD
 To play with a friend over the Internet:
 Because standard Wi-Fi routers block incoming connections, you will need a virtual network tool.
 Both players download and install Tailscale or Radmin VPN.
@@ -50,4 +61,10 @@ Connect to the same virtual network.
 The Host gives the Joiner their new Virtual IP (e.g., a 100.x.x.x address from Tailscale).
 The Joiner connects using that Virtual IP.
 
-*Note for Windows WSL users: If you are hosting on WSL, Windows may block the incoming connection. You may need to run wsl --set-sparse true in PowerShell, or install Tailscale directly inside your Linux terminal.
+* Note for Windows WSL users: If you are hosting on WSL, Windows may block the incoming connection. You may need to run wsl --set-sparse true in PowerShell, or install Tailscale directly inside your Linux terminal.
+
+## File Structure
+test.c - Main source code containing UI, Networking, and AI logic.
+puzzleX_X.txt - Auto-generated map files.
+savegame_X.txt - Auto-generated save states.
+leaderboard.txt - Tracks global player stats.
