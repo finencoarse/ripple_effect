@@ -25,6 +25,7 @@
 #define BLUE    "\033[34m"
 #define CYAN    "\033[36m"
 #define BOLD    "\033[1m"
+// Cursor Highlighting for Multiplayer Modes
 #define INV_CURSOR  "\033[47;30m" // White background for local player
 #define OPP_CURSOR  "\033[41;37m" // Red background for opponent
 #define BOTH_CURSOR "\033[45;37m" // Magenta if both cursors are on same cell
@@ -35,7 +36,7 @@ int elapsed_seconds = 0;
 pthread_mutex_t timer_mutex = PTHREAD_MUTEX_INITIALIZER;
 struct termios orig_termios; 
 
-char global_username[32] = "Player"; // Added for Leaderboard
+char global_username[32] = "Player"; 
 
 // --- NETWORK STRUCTS ---
 typedef struct {
@@ -89,7 +90,7 @@ void* timer_thread_func(void* arg) {
     return NULL;
 }
 
-// --- 100% MATHEMATICALLY VERIFIED LAYOUTS ---
+// --- Puzzle Layouts ---
 void createDefaultFiles() {
     FILE *f;
     if ((f = fopen("puzzle6_1.txt", "r"))) fclose(f);
@@ -148,7 +149,6 @@ void printBoard(int size, int regions[MAX][MAX], int initial_puzzle[MAX][MAX], i
     printf("\n");
 
     for (int i = 0; i < size; i++) {
-        // Horizontal Grid Lines
         printf("   "); 
         for (int j = 0; j < size; j++) {
             printf("+"); 
@@ -167,15 +167,13 @@ void printBoard(int size, int regions[MAX][MAX], int initial_puzzle[MAX][MAX], i
         }
         printf("\n");
 
-        // Cell Values
         printf(" " BOLD "%d " RESET, i + 1); 
         for (int j = 0; j < size; j++) {
             if (j == 0 || regions[i][j] != regions[i][j-1]) printf(BLUE "|" RESET); 
             else printf(" "); 
             
             int is_cursor = (i == cursor_r && j == cursor_c);
-            int is_opp_cursor = (game_mode == 1 && i == opp_r && j == opp_c); // Co-op cursor
-
+            int is_opp_cursor = (game_mode == 1 && i == opp_r && j == opp_c); 
             if (is_cursor && is_opp_cursor) printf(BOTH_CURSOR);
             else if (is_cursor) printf(INV_CURSOR);
             else if (is_opp_cursor) printf(OPP_CURSOR);
@@ -208,7 +206,7 @@ void printBoard(int size, int regions[MAX][MAX], int initial_puzzle[MAX][MAX], i
                     if (!is_opp_vs_cursor) printf(YELLOW BOLD);
                     printf(" %d ", opp_puzzle[i][j]); 
                 } else {
-                    if (!is_opp_vs_cursor) printf(RED BOLD); // Render opp progress as red
+                    if (!is_opp_vs_cursor) printf(RED BOLD); 
                     printf(" %d ", opp_puzzle[i][j]);       
                 }
                 if (is_opp_vs_cursor || initial_puzzle[i][j] != 0 || opp_puzzle[i][j] != 0) printf(RESET); 
@@ -218,7 +216,6 @@ void printBoard(int size, int regions[MAX][MAX], int initial_puzzle[MAX][MAX], i
         printf("\n");
     }
 
-    // Bottom Border
     printf("   ");
     for (int j = 0; j < size; j++) printf(BLUE "+---" RESET);
     printf(BLUE "+" RESET);
@@ -466,7 +463,7 @@ void viewLeaderboard() {
     fgets(buf, sizeof(buf), stdin);
 }
 
-// --- NETWORK HELPER FUNCTIONS (DEBUGGED) ---
+// --- NETWORK HELPER FUNCTIONS ---
 int startServer() {
     int server_fd;
     struct sockaddr_in address;
@@ -578,13 +575,11 @@ void playGame(int size, int regions[MAX][MAX], int initial_puzzle[MAX][MAX], int
 
         printBoard(size, regions, initial_puzzle, puzzle, opp_puzzle, hints_left, mistakes_found, cursor_r, cursor_c, opp_r, opp_c, game_mode, opp_name, status_msg);
 
-        // Win Verification
         if (isWin(size, puzzle)) {
             if (game_mode != 2) { 
                 is_winner = 1; 
-                break; // Single or Coop win
+                break; 
             } else { 
-                // Versus Win Check -> Send final stats to opponent
                 NetPacket pkt = {'F', 0, 0, 0, mistakes_found, hints_used};
                 send(net_sock, &pkt, sizeof(NetPacket), 0);
                 is_winner = 1; 
@@ -617,20 +612,19 @@ void playGame(int size, int regions[MAX][MAX], int initial_puzzle[MAX][MAX], int
             } else {
                 status_msg[0] = '\0';
                 
-                // Sync shared hints for co-op
                 if (game_mode == 1 && pkt.hints < hints_left && pkt.hints >= 0) hints_left = pkt.hints;
 
                 if (pkt.type == 'C') { opp_r = pkt.r; opp_c = pkt.c; }
                 else if (pkt.type == 'M') { 
-                    if (game_mode == 1) { // Co-op
+                    if (game_mode == 1) { 
                         puzzle[pkt.r][pkt.c] = pkt.val;
                         if (pkt.val == solution[pkt.r][pkt.c]) {
-                            initial_puzzle[pkt.r][pkt.c] = pkt.val; // Lock it globally
+                            initial_puzzle[pkt.r][pkt.c] = pkt.val;
                             sprintf(status_msg, "[Net] %s placed correct %d (Locked)", opp_name, pkt.val);
                         } else {
                             sprintf(status_msg, "[Net] %s placed %d", opp_name, pkt.val);
                         }
-                    } else { // Versus
+                    } else { 
                         opp_puzzle[pkt.r][pkt.c] = pkt.val; 
                     }
                 }
@@ -638,14 +632,14 @@ void playGame(int size, int regions[MAX][MAX], int initial_puzzle[MAX][MAX], int
                     if (game_mode == 1) puzzle[pkt.r][pkt.c] = 0;
                     else opp_puzzle[pkt.r][pkt.c] = 0;
                 }
-                else if (pkt.type == 'F') { // Opponent Finished Versus Board
-                    if (isWin(size, puzzle)) { // Tie Breaker Case
+                else if (pkt.type == 'F') { 
+                    if (isWin(size, puzzle)) { 
                         if (mistakes_found < pkt.mistakes) is_winner = 1;
                         else if (mistakes_found > pkt.mistakes) is_winner = 0;
                         else if (hints_used <= pkt.hints) is_winner = 1;
                         else is_winner = 0;
                     } else {
-                        is_winner = 0; // I haven't finished, so they beat me
+                        is_winner = 0; 
                     }
                     break;
                 }
@@ -691,7 +685,6 @@ void playGame(int size, int regions[MAX][MAX], int initial_puzzle[MAX][MAX], int
                 } else if (isValidMove(cursor_r, cursor_c, num, size, puzzle, regions, region_sizes, status_msg)) {
                     puzzle[cursor_r][cursor_c] = num;
                     
-                    // Co-op Locking Logic
                     if (game_mode == 1 && num == solution[cursor_r][cursor_c]) {
                         initial_puzzle[cursor_r][cursor_c] = num; 
                         sprintf(status_msg, "[+] Perfect match! Cell permanently locked.");
@@ -768,7 +761,6 @@ void playGame(int size, int regions[MAX][MAX], int initial_puzzle[MAX][MAX], int
                 if (hints_left <= 0 && hints_left != -1) {
                     sprintf(status_msg, "[!] Out of hints!");
                 } else {
-                    // New Auto-Solve logic utilizing the pre-calculated solution to always place the correct number
                     int placed = 0;
                     for (int i = 0; i < size && !placed; i++) {
                         for (int j = 0; j < size; j++) {
@@ -777,7 +769,7 @@ void playGame(int size, int regions[MAX][MAX], int initial_puzzle[MAX][MAX], int
                                 cursor_r = i; cursor_c = j;
                                 placed = 1;
                                 
-                                if (game_mode == 1) initial_puzzle[i][j] = solution[i][j]; // Lock it
+                                if (game_mode == 1) initial_puzzle[i][j] = solution[i][j];
                                 
                                 sprintf(status_msg, "[Auto-Solve] AI placed correct %d here!", puzzle[i][j]);
                                 if (hints_left > 0) hints_left--;
@@ -827,7 +819,6 @@ int main(int argc, char *argv[]) {
     char input[256];
     int choice;
 
-    // Get Global Username
     printf("\033[2J\033[H");
     printf(CYAN BOLD "=====================================\n");
     printf("     WELCOME TO RIPPLE EFFECT        \n");
@@ -843,7 +834,6 @@ int main(int argc, char *argv[]) {
         if(loadPuzzleFromFile(argv[1], &size, regions, initial_puzzle, puzzle, &saved_time, &hints_left, &initial_hint_quota, &hints_used, &mistakes_found)) {
             pthread_mutex_lock(&timer_mutex); elapsed_seconds = saved_time; pthread_mutex_unlock(&timer_mutex);
             
-            // Calculate solution before playing
             int solution[MAX][MAX]; memcpy(solution, puzzle, sizeof(solution));
             int temp_sizes[MAX_REGIONS]; getRegionSizes(size, regions, temp_sizes); solveBoard(size, solution, regions, temp_sizes);
             
