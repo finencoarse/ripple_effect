@@ -65,7 +65,14 @@ The Joiner connects using that Virtual IP.
 * Note for Windows WSL users: If you are hosting on WSL, Windows may block the incoming connection. You may need to run wsl --set-sparse true in PowerShell, or install Tailscale directly inside your Linux terminal.
 
 ## File Structure
-test.c - Main source code containing UI, Networking, and AI logic.
-puzzleX_X.txt - Auto-generated map files.
-savegame_X.txt - Auto-generated save states.
-leaderboard.txt - Tracks global player stats.
+* test.c - Main source code containing UI, Networking, and AI logic.
+* puzzleX_X.txt - Auto-generated map files.
+* savegame_X.txt - Auto-generated save states.
+* leaderboard.txt - Tracks global player stats.
+
+## To Contribute
+Do 
+```bash
+git clone https://github.com/finencoarse/ripple_effect
+```
+and pull updates after you tested out a new feature
