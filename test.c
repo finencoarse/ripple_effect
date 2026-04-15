@@ -842,7 +842,7 @@ int main(int argc, char *argv[]) {
             printf(RED "[!] Could not load %s. Falling back to main menu.\n" RESET, argv[1]);
         }
     }
-
+    // Main Menu Loop Here
     while(1) {
         printf(CYAN BOLD "\n=====================================\n");
         printf("         RIPPLE EFFECT PUZZLE        \n");
