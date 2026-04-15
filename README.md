@@ -54,6 +54,7 @@ Player 2 types in Player 1's local IPv4 Address (e.g., 192.168.1.5 or 10.x.x.x).
 > ipconfig
 > ```
 > in Windows CMD
+
 To play with a friend over the Internet:
 Because standard Wi-Fi routers block incoming connections, you will need a virtual network tool.
 Both players download and install Tailscale or Radmin VPN.
