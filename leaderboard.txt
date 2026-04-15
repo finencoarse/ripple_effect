@@ -1,0 +1,1 @@
+[test1] Mode: Versus (vs host) - LOSS | Puzzle: 8x8 | Diff: Easy    | Time: 01:24 | Hints: 53 | Mistakes: 22
