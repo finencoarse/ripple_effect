@@ -137,7 +137,7 @@ void printBoard(int size, int regions[MAX][MAX], int initial_puzzle[MAX][MAX], i
     printf("| MISTAKES: %d ]\n\n" RESET, mistakes_found);
 
     if (game_mode == 2) {
-        printf(YELLOW "      --- YOUR BOARD ---                          --- %s'S BOARD ---\n" RESET, opp_name);
+        printf(YELLOW "      --- YOUR BOARD ---          --- %s'S BOARD ---\n" RESET, opp_name);
     }
 
     printf("    ");
@@ -842,7 +842,7 @@ int main(int argc, char *argv[]) {
             printf(RED "[!] Could not load %s. Falling back to main menu.\n" RESET, argv[1]);
         }
     }
-    // Main Menu Loop Here
+
     while(1) {
         printf(CYAN BOLD "\n=====================================\n");
         printf("         RIPPLE EFFECT PUZZLE        \n");
