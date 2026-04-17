@@ -20,7 +20,7 @@
 #define MAX 10 
 #define MAX_REGIONS (MAX * MAX)
 
-// --- YOUR ORIGINAL UI COLORS ---
+// --- UI/UX ANSI Color Codes ---
 #define RESET   "\033[0m"
 #define RED     "\033[31m"
 #define GREEN   "\033[32m"
@@ -46,7 +46,7 @@ typedef struct {
 
 typedef struct { char username[32]; } InitPacket;
 
-// Globals
+// --- GLOBAL VARIABLES ---
 extern volatile sig_atomic_t sigint_received;
 extern volatile int keep_timer_running;
 extern int elapsed_seconds;
@@ -54,25 +54,26 @@ extern pthread_mutex_t timer_mutex;
 extern struct termios orig_termios; 
 extern char global_username[32];
 
-// UI
+// --- UI PROTOTYPES (ui.c) ---
 void enableRawMode();
 void disableRawMode();
 void printBoard(int size, int regions[MAX][MAX], int initial_puzzle[MAX][MAX], int puzzle[MAX][MAX], int opp_puzzle[MAX][MAX], int hints_left, int mistakes_found, int cursor_r, int cursor_c, int opp_r, int opp_c, int game_mode, const char* opp_name, const char* status_msg);
 int getMapChoice(int size);
 int getHintChoice();
 const char* getDifficultyString(int initial_hints);
+void sanitize_username(char* name, int max_len);
 
-// Logic
+// --- LOGIC PROTOTYPES (game_logic.c) ---
 void getRegionSizes(int size, int regions[MAX][MAX], int region_sizes[]);
 int isWin(int size, int puzzle[MAX][MAX]);
 int isValidMove(int r, int c, int num, int size, int puzzle[MAX][MAX], int regions[MAX][MAX], int region_sizes[], char* status_msg);
 int solveBoard(int size, int puzzle[MAX][MAX], int regions[MAX][MAX], int region_sizes[]);
 
-// Net
+// --- NETWORK PROTOTYPES (network.c) ---
 int startServer();
 int connectToServer(const char* ip);
 
-// File
+// --- FILE IO PROTOTYPES (file_io.c) ---
 void createDefaultFiles();
 int loadPuzzleFromFile(const char *filename, int *size, int regions[MAX][MAX], int initial_puzzle[MAX][MAX], int puzzle[MAX][MAX], int *saved_time, int *hints_left, int *initial_hint_quota, int *hints_used, int *mistakes_found);
 void saveGameProcess(int size, int regions[MAX][MAX], int initial_puzzle[MAX][MAX], int puzzle[MAX][MAX], int current_time, int hints_left, int initial_hint_quota, int hints_used, int mistakes_found);

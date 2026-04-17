@@ -1,17 +1,5 @@
 #include "game.h"
 
-#include <stdio.h>       
-#include <stdlib.h>    
-#include <string.h>     
-#include <unistd.h>    
-#include <signal.h>     
-#include <pthread.h>    
-#include <sys/wait.h>    
-#include <errno.h>    
-#include <sys/select.h> 
-#include <sys/socket.h>
-
-// --- ACTUAL GLOBAL VARIABLE DEFINITIONS ---
 volatile sig_atomic_t sigint_received = 0;
 volatile int keep_timer_running = 1;
 int elapsed_seconds = 0;
@@ -68,7 +56,7 @@ void playGame(int size, int regions[MAX][MAX], int initial_puzzle[MAX][MAX], int
             snprintf(status_msg, 256, "[!] Ctrl+C detected. Save progress? (y/n): ");
             printBoard(size, regions, initial_puzzle, puzzle, opp_puzzle, hints_left, mistakes_found, cursor_r, cursor_c, opp_r, opp_c, game_mode, opp_name, status_msg);
             
-            char ans; // FIXED: Added missing declaration
+            char ans;
             while(read(STDIN_FILENO, &ans, 1) != 1); 
             
             if (ans == 'y' || ans == 'Y') {
@@ -107,8 +95,9 @@ void playGame(int size, int regions[MAX][MAX], int initial_puzzle[MAX][MAX], int
             NetPacket pkt;
             if (recv(net_sock, &pkt, sizeof(pkt), 0) <= 0) {
                 snprintf(status_msg, 256, "[!] Connection lost. Reverting to Singleplayer.");
-                net_sock = -1; game_mode = 0; opp_r = -1;
+                net_sock = -1; game_mode = 0; opp_r = -1; opp_c = -1;
             } else {
+                if (game_mode == 1 && pkt.hints < hints_left && pkt.hints >= 0) hints_left = pkt.hints;
                 if (pkt.type == 'C') { opp_r = pkt.r; opp_c = pkt.c; }
                 else if (pkt.type == 'M') {
                     if (game_mode == 1) { 
@@ -119,7 +108,7 @@ void playGame(int size, int regions[MAX][MAX], int initial_puzzle[MAX][MAX], int
                 }
                 else if (pkt.type == 'X') { if (game_mode == 1) puzzle[pkt.r][pkt.c] = 0; else opp_puzzle[pkt.r][pkt.c] = 0; }
                 else if (pkt.type == 'F') { is_winner = 0; break; } 
-                else if (pkt.type == 'Q') { net_sock = -1; game_mode = 0; }
+                else if (pkt.type == 'Q') { net_sock = -1; game_mode = 0; opp_r = -1; opp_c = -1;}
             }
         }
 
@@ -146,18 +135,68 @@ void playGame(int size, int regions[MAX][MAX], int initial_puzzle[MAX][MAX], int
             }
             else if (c >= '1' && c <= '9') {
                 int num = c - '0';
-                if (initial_puzzle[cursor_r][cursor_c] == 0) {
-                    if (isValidMove(cursor_r, cursor_c, num, size, puzzle, regions, region_sizes, status_msg)) {
-                        puzzle[cursor_r][cursor_c] = num;
-                        if (game_mode == 1 && num == solution[cursor_r][cursor_c]) initial_puzzle[cursor_r][cursor_c] = num;
-                        if (net_sock != -1) { NetPacket p = {'M', cursor_r, cursor_c, num, mistakes_found, hints_left}; send(net_sock, &p, sizeof(p), 0); }
-                    } else mistakes_found++;
-                }
+                if (initial_puzzle[cursor_r][cursor_c] != 0) {
+                    snprintf(status_msg, 256, "[!] Cannot overwrite locked cells.");
+                } else if (isValidMove(cursor_r, cursor_c, num, size, puzzle, regions, region_sizes, status_msg)) {
+                    puzzle[cursor_r][cursor_c] = num;
+                    if (game_mode == 1 && num == solution[cursor_r][cursor_c]) initial_puzzle[cursor_r][cursor_c] = num;
+                    if (net_sock != -1) { NetPacket p = {'M', cursor_r, cursor_c, num, mistakes_found, hints_left}; send(net_sock, &p, sizeof(p), 0); }
+                } else mistakes_found++;
             }
-            else if (c == '0' || c == ' ') {
+            else if (c == '0' || c == ' ' || c == 127 || c == 8) { 
                 if (initial_puzzle[cursor_r][cursor_c] == 0) {
                     puzzle[cursor_r][cursor_c] = 0;
                     if (net_sock != -1) { NetPacket p = {'X', cursor_r, cursor_c, 0, mistakes_found, hints_left}; send(net_sock, &p, sizeof(p), 0); }
+                }
+            }
+            else if (c == 'h' || c == 'H') {
+                if (initial_puzzle[cursor_r][cursor_c] != 0) {
+                    snprintf(status_msg, 256, "[!] Cannot provide options for a locked clue.");
+                } else {
+                    int max_val = region_sizes[regions[cursor_r][cursor_c]];
+                    char opts[64] = ""; int count = 0;
+                    for (int n = 1; n <= max_val; n++) {
+                        if (isValidMove(cursor_r, cursor_c, n, size, puzzle, regions, region_sizes, NULL)) {
+                            char temp[16]; snprintf(temp, 16, "%d ", n); strcat(opts, temp); count++;
+                        }
+                    }
+                    if (count > 0) snprintf(status_msg, 256, "[Hint] Valid options here: %s", opts);
+                    else snprintf(status_msg, 256, "[Hint] No valid options! Mistake exists.");
+                }
+            }
+            else if (c == 'c' || c == 'C') {
+                int temp_puzzle[MAX][MAX];
+                for(int i=0; i<size; i++) for(int j=0; j<size; j++) temp_puzzle[i][j] = puzzle[i][j];
+                if (solveBoard(size, temp_puzzle, regions, region_sizes)) snprintf(status_msg, 256, "[+] Check passed! Board is solvable.");
+                else { mistakes_found++; snprintf(status_msg, 256, "[!] Mistakes found! Cannot be solved."); }
+            }
+            else if (c == '?') {
+                if (!auto_solve_unlocked) {
+                    disableRawMode();
+                    printf(YELLOW "\n[Security] Enter password: " RESET);
+                    char pwd[32];
+                    if (fgets(pwd, 32, stdin)) {
+                        pwd[strcspn(pwd, "\n")] = 0; 
+                        if (strcmp(pwd, "admin") == 0) { auto_solve_unlocked = 1; snprintf(status_msg, 256, "[+] Auto-Solve unlocked!"); } 
+                        else snprintf(status_msg, 256, "[!] Incorrect password!");
+                    }
+                    enableRawMode(); continue; 
+                }
+                if (hints_left <= 0 && hints_left != -1) snprintf(status_msg, 256, "[!] Out of hints!");
+                else {
+                    int placed = 0;
+                    for (int i = 0; i < size && !placed; i++) {
+                        for (int j = 0; j < size; j++) {
+                            if (puzzle[i][j] == 0) {
+                                puzzle[i][j] = solution[i][j]; cursor_r = i; cursor_c = j; placed = 1;
+                                if (game_mode == 1) initial_puzzle[i][j] = solution[i][j];
+                                snprintf(status_msg, 256, "[Auto-Solve] Placed correct %d here!", puzzle[i][j]);
+                                if (hints_left > 0) hints_left--; hints_used++;
+                                if (net_sock != -1) { NetPacket pkt = {'M', cursor_r, cursor_c, puzzle[cursor_r][cursor_c], mistakes_found, hints_left}; send(net_sock, &pkt, sizeof(NetPacket), 0); }
+                                break;
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -191,6 +230,18 @@ int main(int argc, char *argv[]) {
     int size, saved_t, hints, quota, used, mistakes;
     int regs[MAX][MAX], init[MAX][MAX], puz[MAX][MAX];
     char input[256]; int choice;
+
+    if (argc == 2) {
+        printf(YELLOW "\nAttempting to load file: %s\n" RESET, argv[1]);
+        if(loadPuzzleFromFile(argv[1], &size, regs, init, puz, &saved_t, &hints, &quota, &used, &mistakes)) {
+            int sol[MAX][MAX]; memcpy(sol, puz, sizeof(sol));
+            int ts[MAX_REGIONS]; getRegionSizes(size, regs, ts); solveBoard(size, sol, regs, ts);
+            pthread_mutex_lock(&timer_mutex); elapsed_seconds = saved_t; pthread_mutex_unlock(&timer_mutex);
+            playGame(size, regs, init, puz, sol, hints, quota, used, mistakes, -1, 0, "");
+        } else {
+            printf(RED "[!] Could not load %s.\n" RESET, argv[1]);
+        }
+    }
 
     while(1) {
          printf(CYAN BOLD "\n=====================================\n");
@@ -227,9 +278,9 @@ int main(int argc, char *argv[]) {
                 int ts[MAX_REGIONS]; getRegionSizes(size, regs, ts); solveBoard(size, sol, regs, ts);
                 pthread_mutex_lock(&timer_mutex); elapsed_seconds = saved_t; pthread_mutex_unlock(&timer_mutex);
                 playGame(size, regs, init, puz, sol, hints, quota, used, mistakes, -1, 0, "");
-            }
+            } else printf(RED "\n[!] Save not found.\n" RESET);
         } else if (choice == 5) viewLeaderboard();
-        else if (choice == 6) { // HOST MULTIPLAYER
+        else if (choice == 6) { 
             int b_size, g_mode;
             printf(CYAN "Select Board Size (6 or 8): " RESET);
             if (!fgets(input, 256, stdin) || sscanf(input, "%d", &b_size) != 1 || (b_size != 6 && b_size != 8)) continue;
@@ -250,6 +301,7 @@ int main(int argc, char *argv[]) {
                     send(net_sock, &sp, sizeof(SyncPacket), 0);
                     
                     InitPacket ip_pkt; recv(net_sock, &ip_pkt, sizeof(InitPacket), MSG_WAITALL);
+                    sanitize_username(ip_pkt.username, 32);
                     
                     int sol[MAX][MAX]; memcpy(sol, puz, sizeof(sol));
                     int ts[MAX_REGIONS]; getRegionSizes(size, regs, ts); solveBoard(size, sol, regs, ts);
@@ -257,7 +309,7 @@ int main(int argc, char *argv[]) {
                     playGame(size, regs, init, puz, sol, hints, quota, used, mistakes, net_sock, g_mode, ip_pkt.username);
                 }
             }
-        } else if (choice == 7) { // JOIN MULTIPLAYER
+        } else if (choice == 7) { 
             char ip[64];
             printf(CYAN "Enter Host IP: " RESET);
             if (fgets(ip, 64, stdin)) {
@@ -266,6 +318,7 @@ int main(int argc, char *argv[]) {
                 if (net_sock != -1) {
                     SyncPacket sp;
                     if (recv(net_sock, &sp, sizeof(SyncPacket), MSG_WAITALL) > 0) {
+                        sanitize_username(sp.host_username, 32);
                         InitPacket ip_pkt; strcpy(ip_pkt.username, global_username);
                         send(net_sock, &ip_pkt, sizeof(InitPacket), 0);
                         

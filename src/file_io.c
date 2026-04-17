@@ -1,12 +1,5 @@
 #include "game.h"
 
-#include <stdio.h>     
-#include <stdlib.h>     
-#include <unistd.h>     
-#include <sys/file.h>   
-#include <fcntl.h>
-
-//transfer completed
 void createDefaultFiles() {
     FILE *f;
     if ((f = fopen("data/puzzle6_1.txt", "r"))) fclose(f);
@@ -24,9 +17,9 @@ void createDefaultFiles() {
         fprintf(f, "8\n0 1 1 1 15 14 14 13\n0 0 2 15 15 15 14 13\n0 2 2 2 15 11 11 13\n0 3 2 4 11 11 12 13\n5 5 4 4 4 11 10 13\n5 6 7 4 8 10 10 10\n5 6 7 8 8 8 10 9\n5 6 6 6 8 9 9 9\n4 0 0 2 0 0 0 0\n0 0 0 0 0 4 0 0\n0 0 0 0 0 0 8 0\n0 0 0 0 0 0 0 0\n0 0 0 0 4 2 0 0\n0 0 0 0 0 0 1 0\n0 0 0 1 0 0 0 0\n0 0 0 0 0 0 0 0\n");
         fclose(f);
     }
-    if ((f = fopen("data/puzzle8_2.txt", "r"))) fclose(f);
+if ((f = fopen("data/puzzle8_2.txt", "r"))) fclose(f);
     else if ((f = fopen("data/puzzle8_2.txt", "w"))) {
-        fprintf(f, "8\n0 0 1 1 2 2 3 3\n0 0 1 1 2 2 3 3\n4 4 5 5 6 6 7 7\n4 4 5 5 6 6 7 7\n8 8 9 9 10 10 11 11\n8 8 9 9 10 10 11 11\n12 12 13 13 14 14 15 15\n12 12 13 13 14 14 15 15\n1 0 0 0 0 0 0 0\n0 0 0 0 0 0 0 2\n0 0 3 0 0 0 0 0\n0 0 0 0 4 0 0 0\n0 0 0 1 0 0 0 0\n0 2 0 0 0 0 0 0\n0 0 0 0 0 0 3 0\n0 0 0 0 0 4 0 0\n");
+        fprintf(f, "8\n0 0 1 1 3 3 5 5\n0 2 1 4 3 6 5 7\n8 8 10 10 12 12 14 14\n8 9 10 11 12 13 14 15\n16 16 18 18 20 20 22 22\n16 17 18 19 20 21 22 23\n24 24 26 26 28 28 30 30\n24 25 26 27 28 29 30 31\n1 0 0 3 0 0 0 3\n0 1 0 0 3 0 2 0\n0 0 1 0 0 3 0 0\n2 0 0 1 0 0 3 0\n0 2 0 0 1 0 0 3\n3 0 2 0 0 1 0 0\n0 3 0 2 0 0 1 0\n0 0 3 0 2 0 0 1\n");
         fclose(f);
     }
 }
@@ -103,7 +96,6 @@ void saveGameProcess(int size, int regions[MAX][MAX], int initial_puzzle[MAX][MA
     }
 }
 
-// Updated saveScore to record Game Mode and Winner
 void saveScore(int size, int final_time, const char* difficulty, int hints_used, int mistakes_found, int game_mode, int is_win, const char* opp_name) {
     FILE *f = fopen("data/leaderboard.txt", "a");
     if (f) {

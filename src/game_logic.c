@@ -1,14 +1,12 @@
 #include "game.h"
-#include <stdio.h>  
- // transfer completed
+
 void getRegionSizes(int size, int regions[MAX][MAX], int region_sizes[]) {
     for(int i = 0; i < MAX_REGIONS; i++) region_sizes[i] = 0; 
-    for(int r = 0; r < size; r++) {
-        for(int c = 0; c < size; c++) { 
+    for(int r = 0; r < size; r++) 
+        for(int c = 0; c < size; c++) 
             if (regions[r][c] < MAX_REGIONS) region_sizes[regions[r][c]]++;
-        }
-    }
 }
+
 int isValidMove(int r, int c, int num, int size, int puzzle[MAX][MAX], int regions[MAX][MAX], int region_sizes[], char* status_msg) {
     int reg = regions[r][c];
     if (num > region_sizes[reg]) {
