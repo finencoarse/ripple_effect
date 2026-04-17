@@ -3,3 +3,4 @@
 [test3] Mode: Co-op (with test2) | Puzzle: 6x6 | Diff: Easy    | Time: 00:12 | Hints: 0 | Mistakes: 0
 [wwwwwwwwwwwwwwwwwwwwwwwwwwwwwww] Mode: Versus (vs wwwwwwwwwwwwwwwwwwwwwwwwwwwwwww) - LOSS | Puzzle: 6x6 | Diff: Easy    | Time: 29:36 | Hints: 0 | Mistakes: 0
 [dkjqwjdawdnsaojfhawljfdbalsd] Mode: Singleplayer | Puzzle: 6x6 | Diff: Easy    | Time: 01:59 | Hints: 35 | Mistakes: 21
+[1] Mode: Singleplayer | Puzzle: 6x6 | Diff: Easy    | Time: 00:09 | Hints: 25 | Mistakes: 0

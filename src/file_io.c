@@ -9,30 +9,32 @@
 //transfer completed
 void createDefaultFiles() {
     FILE *f;
-    if ((f = fopen("puzzle6_1.txt", "r"))) fclose(f);
-    else if ((f = fopen("puzzle6_1.txt", "w"))) {
+    if ((f = fopen("data/puzzle6_1.txt", "r"))) fclose(f);
+    else if ((f = fopen("data/puzzle6_1.txt", "w"))) {
         fprintf(f, "6\n0 7 7 8 8 9\n0 6 7 8 9 9\n2 2 2 8 9 9\n3 5 5 10 12 12\n3 4 5 10 10 12\n3 3 5 11 10 10\n0 0 0 0 0 0\n0 0 0 0 0 0\n0 0 0 0 0 0\n0 0 0 0 0 0\n0 0 0 0 0 0\n0 0 0 0 0 0\n");
         fclose(f);
     }
-    if ((f = fopen("puzzle6_2.txt", "r"))) fclose(f);
-    else if ((f = fopen("puzzle6_2.txt", "w"))) {
+    if ((f = fopen("data/puzzle6_2.txt", "r"))) fclose(f);
+    else if ((f = fopen("data/puzzle6_2.txt", "w"))) {
         fprintf(f, "6\n0 0 0 1 1 1\n0 0 0 1 1 1\n2 2 2 3 3 3\n2 2 2 3 3 3\n4 4 4 5 5 5\n4 4 4 5 5 5\n1 0 0 0 5 0\n0 0 6 0 0 0\n0 3 0 5 0 0\n0 0 4 0 3 0\n0 0 0 6 0 0\n0 4 0 0 0 2\n");
         fclose(f);
     }
-    if ((f = fopen("puzzle8_1.txt", "r"))) fclose(f);
-    else if ((f = fopen("puzzle8_1.txt", "w"))) {
+    if ((f = fopen("data/puzzle8_1.txt", "r"))) fclose(f);
+    else if ((f = fopen("data/puzzle8_1.txt", "w"))) {
         fprintf(f, "8\n0 1 1 1 15 14 14 13\n0 0 2 15 15 15 14 13\n0 2 2 2 15 11 11 13\n0 3 2 4 11 11 12 13\n5 5 4 4 4 11 10 13\n5 6 7 4 8 10 10 10\n5 6 7 8 8 8 10 9\n5 6 6 6 8 9 9 9\n4 0 0 2 0 0 0 0\n0 0 0 0 0 4 0 0\n0 0 0 0 0 0 8 0\n0 0 0 0 0 0 0 0\n0 0 0 0 4 2 0 0\n0 0 0 0 0 0 1 0\n0 0 0 1 0 0 0 0\n0 0 0 0 0 0 0 0\n");
         fclose(f);
     }
-    if ((f = fopen("puzzle8_2.txt", "r"))) fclose(f);
-    else if ((f = fopen("puzzle8_2.txt", "w"))) {
+    if ((f = fopen("data/puzzle8_2.txt", "r"))) fclose(f);
+    else if ((f = fopen("data/puzzle8_2.txt", "w"))) {
         fprintf(f, "8\n0 0 1 1 2 2 3 3\n0 0 1 1 2 2 3 3\n4 4 5 5 6 6 7 7\n4 4 5 5 6 6 7 7\n8 8 9 9 10 10 11 11\n8 8 9 9 10 10 11 11\n12 12 13 13 14 14 15 15\n12 12 13 13 14 14 15 15\n1 0 0 0 0 0 0 0\n0 0 0 0 0 0 0 2\n0 0 3 0 0 0 0 0\n0 0 0 0 4 0 0 0\n0 0 0 1 0 0 0 0\n0 2 0 0 0 0 0 0\n0 0 0 0 0 0 3 0\n0 0 0 0 0 4 0 0\n");
         fclose(f);
     }
 }
 
 int loadPuzzleFromFile(const char *filename, int *size, int regions[MAX][MAX], int initial_puzzle[MAX][MAX], int puzzle[MAX][MAX], int *saved_time, int *hints_left, int *initial_hint_quota, int *hints_used, int *mistakes_found) {
-    FILE *f = fopen(filename, "r");
+    char full_path[256]; 
+    snprintf(full_path, sizeof(full_path), "data/%s", filename);
+    FILE *f = fopen(full_path, "r");
     if (!f) return 0;
 
     if (fscanf(f, "%d", size) != 1 || *size <= 0 || *size > MAX) { fclose(f); return 0; }
@@ -66,10 +68,10 @@ void saveGameProcess(int size, int regions[MAX][MAX], int initial_puzzle[MAX][MA
     pid_t pid = fork();
     if (pid < 0) perror("Fork failed");
     else if (pid == 0) {
-        char save_filename[32];
-        sprintf(save_filename, "savegame_%d.txt", size);
+        char save_path[256];
+        snprintf(save_path, sizeof(save_path), "data/savegame_%d.txt", size);
+        int fd = open(save_path, O_WRONLY | O_CREAT | O_TRUNC, 0666);
 
-        int fd = open(save_filename, O_WRONLY | O_CREAT | O_TRUNC, 0666);
         if (fd != -1) {
             flock(fd, LOCK_EX); 
             FILE *f = fdopen(fd, "w"); 
@@ -103,7 +105,7 @@ void saveGameProcess(int size, int regions[MAX][MAX], int initial_puzzle[MAX][MA
 
 // Updated saveScore to record Game Mode and Winner
 void saveScore(int size, int final_time, const char* difficulty, int hints_used, int mistakes_found, int game_mode, int is_win, const char* opp_name) {
-    FILE *f = fopen("leaderboard.txt", "a");
+    FILE *f = fopen("data/leaderboard.txt", "a");
     if (f) {
         fprintf(f, "[%s] ", global_username);
         if (game_mode == 0) fprintf(f, "Mode: Singleplayer | ");
@@ -121,7 +123,7 @@ void viewLeaderboard() {
     printf(CYAN BOLD "===============================================================================\n");
     printf("                                LEADERBOARD                                    \n");
     printf("===============================================================================\n" RESET);
-    FILE *f = fopen("leaderboard.txt", "r");
+    FILE *f = fopen("data/leaderboard.txt", "r");
     if (!f) {
         printf(YELLOW "No scores yet. Complete a game to see your stats here!\n" RESET);
     } else {

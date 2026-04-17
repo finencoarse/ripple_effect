@@ -1,0 +1,282 @@
+#include "game.h"
+
+#include <stdio.h>       
+#include <stdlib.h>    
+#include <string.h>     
+#include <unistd.h>    
+#include <signal.h>     
+#include <pthread.h>    
+#include <sys/wait.h>    
+#include <errno.h>    
+#include <sys/select.h> 
+#include <sys/socket.h>
+
+// --- ACTUAL GLOBAL VARIABLE DEFINITIONS ---
+volatile sig_atomic_t sigint_received = 0;
+volatile int keep_timer_running = 1;
+int elapsed_seconds = 0;
+pthread_mutex_t timer_mutex = PTHREAD_MUTEX_INITIALIZER;
+struct termios orig_termios; 
+char global_username[32] = "Player";
+
+// Signal Handlers
+void handle_sigint(int sig) { sigint_received = 1; }
+void handle_sigchld(int sig) {
+    int saved_errno = errno;
+    while (waitpid((pid_t)(-1), 0, WNOHANG) > 0) {}
+    errno = saved_errno;
+}
+
+// Timer Thread
+void* timer_thread_func(void* arg) {
+    while(keep_timer_running) {
+        sleep(1);
+        pthread_mutex_lock(&timer_mutex);
+        elapsed_seconds++;
+        pthread_mutex_unlock(&timer_mutex);
+    }
+    return NULL;
+}
+
+// MAIN GAME LOOP
+void playGame(int size, int regions[MAX][MAX], int initial_puzzle[MAX][MAX], int puzzle[MAX][MAX], int solution[MAX][MAX], int hints_left, int initial_hint_quota, int hints_used, int mistakes_found, int net_sock, int game_mode, const char* opp_name) {
+    int region_sizes[MAX_REGIONS]; 
+    getRegionSizes(size, regions, region_sizes);
+    
+    int opp_puzzle[MAX][MAX];
+    for(int i=0; i<size; i++) 
+        for(int j=0; j<size; j++) 
+            opp_puzzle[i][j] = initial_puzzle[i][j];
+
+    pthread_t timer_thread;
+    keep_timer_running = 1;
+    pthread_create(&timer_thread, NULL, timer_thread_func, NULL);
+
+    int cursor_r = 0, cursor_c = 0, opp_r = -1, opp_c = -1;
+    int auto_solve_unlocked = 0, is_winner = 0, quit_requested = 0;
+    
+    char status_msg[256];
+    if (net_sock != -1) snprintf(status_msg, 256, "[+] Connected to %.31s (%s Mode)", opp_name, game_mode == 1 ? "Co-op" : "Versus");
+    else strncpy(status_msg, "WASD to move | 1-9 to place | Q to Save/Quit", 256);
+    
+    char c;
+    enableRawMode(); 
+
+    while(1) {
+        // 1. Handle SIGINT (Ctrl+C)
+        if (sigint_received) {
+            snprintf(status_msg, 256, "[!] Ctrl+C detected. Save progress? (y/n): ");
+            printBoard(size, regions, initial_puzzle, puzzle, opp_puzzle, hints_left, mistakes_found, cursor_r, cursor_c, opp_r, opp_c, game_mode, opp_name, status_msg);
+            
+            char ans; // FIXED: Added missing declaration
+            while(read(STDIN_FILENO, &ans, 1) != 1); 
+            
+            if (ans == 'y' || ans == 'Y') {
+                pthread_mutex_lock(&timer_mutex); int snap = elapsed_seconds; pthread_mutex_unlock(&timer_mutex);
+                disableRawMode();
+                if (net_sock != -1) { NetPacket p = {'Q', 0, 0, 0, 0, 0}; send(net_sock, &p, sizeof(p), 0); }
+                saveGameProcess(size, regions, initial_puzzle, puzzle, snap, hints_left, initial_hint_quota, hints_used, mistakes_found);
+                quit_requested = 1; break;
+            }
+            sigint_received = 0; status_msg[0] = '\0';
+        }
+
+        printBoard(size, regions, initial_puzzle, puzzle, opp_puzzle, hints_left, mistakes_found, cursor_r, cursor_c, opp_r, opp_c, game_mode, opp_name, status_msg);
+
+        // 2. Check Win Condition
+        if (isWin(size, puzzle)) {
+            is_winner = 1;
+            if (game_mode == 2) { 
+                NetPacket pkt = {'F', 0, 0, 0, mistakes_found, hints_used};
+                send(net_sock, &pkt, sizeof(NetPacket), 0);
+            }
+            break; 
+        }
+
+        fd_set readfds; FD_ZERO(&readfds);
+        FD_SET(STDIN_FILENO, &readfds);
+        int max_fd = STDIN_FILENO;
+        if (net_sock != -1) { FD_SET(net_sock, &readfds); if (net_sock > max_fd) max_fd = net_sock; }
+
+        struct timeval tv = {0, 50000}; 
+        int activity = select(max_fd + 1, &readfds, NULL, NULL, &tv);
+        if (activity < 0 && errno != EINTR) continue;
+
+        // 3. Handle Network Packets
+        if (net_sock != -1 && FD_ISSET(net_sock, &readfds)) {
+            NetPacket pkt;
+            if (recv(net_sock, &pkt, sizeof(pkt), 0) <= 0) {
+                snprintf(status_msg, 256, "[!] Connection lost. Reverting to Singleplayer.");
+                net_sock = -1; game_mode = 0; opp_r = -1;
+            } else {
+                if (pkt.type == 'C') { opp_r = pkt.r; opp_c = pkt.c; }
+                else if (pkt.type == 'M') {
+                    if (game_mode == 1) { 
+                        puzzle[pkt.r][pkt.c] = pkt.val; 
+                        if(pkt.val == solution[pkt.r][pkt.c]) initial_puzzle[pkt.r][pkt.c] = pkt.val; 
+                    }
+                    else opp_puzzle[pkt.r][pkt.c] = pkt.val;
+                }
+                else if (pkt.type == 'X') { if (game_mode == 1) puzzle[pkt.r][pkt.c] = 0; else opp_puzzle[pkt.r][pkt.c] = 0; }
+                else if (pkt.type == 'F') { is_winner = 0; break; } 
+                else if (pkt.type == 'Q') { net_sock = -1; game_mode = 0; }
+            }
+        }
+
+        // 4. Handle Keyboard Input
+        if (FD_ISSET(STDIN_FILENO, &readfds)) {
+            if (read(STDIN_FILENO, &c, 1) == 0) continue; 
+            status_msg[0] = '\0';
+            int moved = 0;
+            if (c == 'w' || c == 'W') { if (cursor_r > 0) { cursor_r--; moved = 1; } }
+            else if (c == 's' || c == 'S') { if (cursor_r < size - 1) { cursor_r++; moved = 1; } }
+            else if (c == 'a' || c == 'A') { if (cursor_c > 0) { cursor_c--; moved = 1; } }
+            else if (c == 'd' || c == 'D') { if (cursor_c < size - 1) { cursor_c++; moved = 1; } }
+            
+            if (moved && net_sock != -1) {
+                NetPacket p = {'C', cursor_r, cursor_c, 0, mistakes_found, hints_left};
+                send(net_sock, &p, sizeof(p), 0);
+            }
+            else if (c == 'q' || c == 'Q') {
+                pthread_mutex_lock(&timer_mutex); int snap = elapsed_seconds; pthread_mutex_unlock(&timer_mutex);
+                disableRawMode();
+                if (net_sock != -1) { NetPacket p = {'Q', 0, 0, 0, 0, 0}; send(net_sock, &p, sizeof(p), 0); close(net_sock); }
+                saveGameProcess(size, regions, initial_puzzle, puzzle, snap, hints_left, initial_hint_quota, hints_used, mistakes_found);
+                quit_requested = 1; break;
+            }
+            else if (c >= '1' && c <= '9') {
+                int num = c - '0';
+                if (initial_puzzle[cursor_r][cursor_c] == 0) {
+                    if (isValidMove(cursor_r, cursor_c, num, size, puzzle, regions, region_sizes, status_msg)) {
+                        puzzle[cursor_r][cursor_c] = num;
+                        if (game_mode == 1 && num == solution[cursor_r][cursor_c]) initial_puzzle[cursor_r][cursor_c] = num;
+                        if (net_sock != -1) { NetPacket p = {'M', cursor_r, cursor_c, num, mistakes_found, hints_left}; send(net_sock, &p, sizeof(p), 0); }
+                    } else mistakes_found++;
+                }
+            }
+            else if (c == '0' || c == ' ') {
+                if (initial_puzzle[cursor_r][cursor_c] == 0) {
+                    puzzle[cursor_r][cursor_c] = 0;
+                    if (net_sock != -1) { NetPacket p = {'X', cursor_r, cursor_c, 0, mistakes_found, hints_left}; send(net_sock, &p, sizeof(p), 0); }
+                }
+            }
+        }
+    }
+
+    keep_timer_running = 0;
+    pthread_join(timer_thread, NULL);
+    disableRawMode(); 
+    pthread_mutex_lock(&timer_mutex); int final_t = elapsed_seconds; pthread_mutex_unlock(&timer_mutex);
+
+    if (!quit_requested) {
+        if (is_winner) printf(GREEN BOLD "\n*** CONGRATULATIONS! YOU WON IN %02d:%02d! ***\n" RESET, final_t/60, final_t%60);
+        else printf(RED BOLD "\n*** GAME OVER! %.31s WON THE MATCH. ***\n" RESET, opp_name);
+        saveScore(size, final_t, getDifficultyString(initial_hint_quota), hints_used, mistakes_found, game_mode, is_winner, opp_name);
+    } else {
+        printf(CYAN "\n[System] Game progress saved successfully.\n" RESET);
+    }
+    if (net_sock != -1) close(net_sock);
+}
+
+int main(int argc, char *argv[]) {
+    signal(SIGINT, handle_sigint);   
+    signal(SIGCHLD, handle_sigchld); 
+    createDefaultFiles(); 
+
+    printf("\033[2J\033[H" CYAN BOLD "=====================================\n     WELCOME TO RIPPLE EFFECT        \n=====================================\n" RESET);
+    printf("Enter Username: ");
+    if (fgets(global_username, 32, stdin)) sanitize_username(global_username, 32);
+    if (strlen(global_username) == 0) strcpy(global_username, "Player");
+
+    int size, saved_t, hints, quota, used, mistakes;
+    int regs[MAX][MAX], init[MAX][MAX], puz[MAX][MAX];
+    char input[256]; int choice;
+
+    while(1) {
+         printf(CYAN BOLD "\n=====================================\n");
+        printf("         RIPPLE EFFECT PUZZLE        \n");
+        printf("=====================================\n" RESET);
+        printf("1. Play 6x6 (New Game)\n");
+        printf("2. Play 8x8 (New Game)\n");
+        printf("3. Load Saved 6x6 Game\n");
+        printf("4. Load Saved 8x8 Game\n");
+        printf("5. View Leaderboard\n");
+        printf("6. Host Multiplayer Game\n");
+        printf("7. Join Multiplayer Game\n");
+        printf("0. Exit Application\n");
+        printf("-------------------------------------\n");
+        printf("Select an option: ");
+        if (!fgets(input, 256, stdin) || sscanf(input, "%d", &choice) != 1) continue;
+        if (choice == 0) break;
+
+        if (choice == 1 || choice == 2) {
+            int s = (choice == 1) ? 6 : 8;
+            int m_id = getMapChoice(s); if(m_id == -1) continue;
+            quota = getHintChoice(); hints = quota; used = 0; mistakes = 0;
+            char fn[32]; snprintf(fn, 32, "puzzle%d_%d.txt", s, m_id);
+            if(loadPuzzleFromFile(fn, &size, regs, init, puz, &saved_t, &hints, &quota, &used, &mistakes)) {
+                int sol[MAX][MAX]; memcpy(sol, puz, sizeof(sol));
+                int ts[MAX_REGIONS]; getRegionSizes(size, regs, ts); solveBoard(size, sol, regs, ts);
+                pthread_mutex_lock(&timer_mutex); elapsed_seconds = 0; pthread_mutex_unlock(&timer_mutex);
+                playGame(size, regs, init, puz, sol, hints, quota, used, mistakes, -1, 0, "");
+            }
+        } else if (choice == 3 || choice == 4) {
+            char fn[32]; snprintf(fn, 32, "savegame_%d.txt", (choice == 3 ? 6 : 8));
+            if(loadPuzzleFromFile(fn, &size, regs, init, puz, &saved_t, &hints, &quota, &used, &mistakes)) {
+                int sol[MAX][MAX]; memcpy(sol, puz, sizeof(sol));
+                int ts[MAX_REGIONS]; getRegionSizes(size, regs, ts); solveBoard(size, sol, regs, ts);
+                pthread_mutex_lock(&timer_mutex); elapsed_seconds = saved_t; pthread_mutex_unlock(&timer_mutex);
+                playGame(size, regs, init, puz, sol, hints, quota, used, mistakes, -1, 0, "");
+            }
+        } else if (choice == 5) viewLeaderboard();
+        else if (choice == 6) { // HOST MULTIPLAYER
+            int b_size, g_mode;
+            printf(CYAN "Select Board Size (6 or 8): " RESET);
+            if (!fgets(input, 256, stdin) || sscanf(input, "%d", &b_size) != 1 || (b_size != 6 && b_size != 8)) continue;
+            
+            int map_id = getMapChoice(b_size); if (map_id == -1) continue;
+            quota = getHintChoice(); hints = quota; used = 0; mistakes = 0;
+            
+            printf(CYAN "Select Mode (1 = Co-op, 2 = Versus): " RESET);
+            if (!fgets(input, 256, stdin) || sscanf(input, "%d", &g_mode) != 1 || (g_mode != 1 && g_mode != 2)) continue;
+
+            char fn[32]; snprintf(fn, 32, "puzzle%d_%d.txt", b_size, map_id);
+            if(loadPuzzleFromFile(fn, &size, regs, init, puz, &saved_t, &hints, &quota, &used, &mistakes)) {
+                int net_sock = startServer();
+                if (net_sock != -1) {
+                    SyncPacket sp; sp.size = size; sp.hints_left = hints; sp.initial_hint_quota = quota;
+                    sp.game_mode = g_mode; strcpy(sp.host_username, global_username);
+                    memcpy(sp.regions, regs, sizeof(sp.regions)); memcpy(sp.initial_puzzle, init, sizeof(sp.initial_puzzle)); memcpy(sp.puzzle, puz, sizeof(sp.puzzle));
+                    send(net_sock, &sp, sizeof(SyncPacket), 0);
+                    
+                    InitPacket ip_pkt; recv(net_sock, &ip_pkt, sizeof(InitPacket), MSG_WAITALL);
+                    
+                    int sol[MAX][MAX]; memcpy(sol, puz, sizeof(sol));
+                    int ts[MAX_REGIONS]; getRegionSizes(size, regs, ts); solveBoard(size, sol, regs, ts);
+                    pthread_mutex_lock(&timer_mutex); elapsed_seconds = 0; pthread_mutex_unlock(&timer_mutex);
+                    playGame(size, regs, init, puz, sol, hints, quota, used, mistakes, net_sock, g_mode, ip_pkt.username);
+                }
+            }
+        } else if (choice == 7) { // JOIN MULTIPLAYER
+            char ip[64];
+            printf(CYAN "Enter Host IP: " RESET);
+            if (fgets(ip, 64, stdin)) {
+                ip[strcspn(ip, "\n")] = 0; 
+                int net_sock = connectToServer(ip);
+                if (net_sock != -1) {
+                    SyncPacket sp;
+                    if (recv(net_sock, &sp, sizeof(SyncPacket), MSG_WAITALL) > 0) {
+                        InitPacket ip_pkt; strcpy(ip_pkt.username, global_username);
+                        send(net_sock, &ip_pkt, sizeof(InitPacket), 0);
+                        
+                        int sol[MAX][MAX]; memcpy(sol, sp.puzzle, sizeof(sol));
+                        int ts[MAX_REGIONS]; getRegionSizes(sp.size, sp.regions, ts); solveBoard(sp.size, sol, sp.regions, ts);
+                        pthread_mutex_lock(&timer_mutex); elapsed_seconds = 0; pthread_mutex_unlock(&timer_mutex);
+                        playGame(sp.size, sp.regions, sp.initial_puzzle, sp.puzzle, sol, sp.hints_left, sp.initial_hint_quota, 0, 0, net_sock, sp.game_mode, sp.host_username);
+                    }
+                }
+            }
+        }
+    }
+    return 0;
+}

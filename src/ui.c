@@ -179,3 +179,12 @@ const char* getDifficultyString(int initial_hints) {
     if (initial_hints == 0) return "Extreme";
     return "Custom";
 }
+
+void sanitize_username(char* name, int max_len) {
+    name[strcspn(name, "\n")] = 0; 
+    for(int i=0; name[i] != '\0'; i++) {
+        if((unsigned char)name[i] < 32 || (unsigned char)name[i] > 126) {
+            name[i] = '?';
+        }
+    }
+}
