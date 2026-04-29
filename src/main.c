@@ -244,7 +244,7 @@ int main(int argc, char *argv[]) {
     }
 
     while(1) {
-         printf(CYAN BOLD "\n=====================================\n");
+        printf(CYAN BOLD "\n=====================================\n");
         printf("         RIPPLE EFFECT PUZZLE        \n");
         printf("=====================================\n" RESET);
         printf("1. Play 6x6 (New Game)\n");
@@ -257,13 +257,27 @@ int main(int argc, char *argv[]) {
         printf("0. Exit Application\n");
         printf("-------------------------------------\n");
         printf("Select an option: ");
+        
         if (!fgets(input, 256, stdin) || sscanf(input, "%d", &choice) != 1) continue;
         if (choice == 0) break;
 
         if (choice == 1 || choice == 2) {
             int s = (choice == 1) ? 6 : 8;
-            int m_id = getMapChoice(s); if(m_id == -1) continue;
-            quota = getHintChoice(); hints = quota; used = 0; mistakes = 0;
+            int step = 1, m_id = 0;
+            
+            // State Machine for Singleplayer Menu
+            while(step > 0 && step <= 2) {
+                if (step == 1) {
+                    m_id = getMapChoice(s);
+                    if (m_id == 0) step = 0; else step = 2;
+                } else if (step == 2) {
+                    quota = getHintChoice();
+                    if (quota == -2) step = 1; else break;
+                }
+            }
+            if (step == 0) continue; // User pressed 0 to exit back to Main Menu
+            
+            hints = quota; used = 0; mistakes = 0;
             char fn[32]; snprintf(fn, 32, "puzzle%d_%d.txt", s, m_id);
             if(loadPuzzleFromFile(fn, &size, regs, init, puz, &saved_t, &hints, &quota, &used, &mistakes)) {
                 int sol[MAX][MAX]; memcpy(sol, puz, sizeof(sol));
@@ -271,6 +285,7 @@ int main(int argc, char *argv[]) {
                 pthread_mutex_lock(&timer_mutex); elapsed_seconds = 0; pthread_mutex_unlock(&timer_mutex);
                 playGame(size, regs, init, puz, sol, hints, quota, used, mistakes, -1, 0, "");
             }
+            
         } else if (choice == 3 || choice == 4) {
             char fn[32]; snprintf(fn, 32, "savegame_%d.txt", (choice == 3 ? 6 : 8));
             if(loadPuzzleFromFile(fn, &size, regs, init, puz, &saved_t, &hints, &quota, &used, &mistakes)) {
@@ -279,18 +294,41 @@ int main(int argc, char *argv[]) {
                 pthread_mutex_lock(&timer_mutex); elapsed_seconds = saved_t; pthread_mutex_unlock(&timer_mutex);
                 playGame(size, regs, init, puz, sol, hints, quota, used, mistakes, -1, 0, "");
             } else printf(RED "\n[!] Save not found.\n" RESET);
-        } else if (choice == 5) viewLeaderboard();
-        else if (choice == 6) { 
-            int b_size, g_mode;
-            printf(CYAN "Select Board Size (6 or 8): " RESET);
-            if (!fgets(input, 256, stdin) || sscanf(input, "%d", &b_size) != 1 || (b_size != 6 && b_size != 8)) continue;
             
-            int map_id = getMapChoice(b_size); if (map_id == -1) continue;
-            quota = getHintChoice(); hints = quota; used = 0; mistakes = 0;
+        } else if (choice == 5) {
+            viewLeaderboard();
             
-            printf(CYAN "Select Mode (1 = Co-op, 2 = Versus): " RESET);
-            if (!fgets(input, 256, stdin) || sscanf(input, "%d", &g_mode) != 1 || (g_mode != 1 && g_mode != 2)) continue;
-
+        } else if (choice == 6) { 
+            int step = 1, b_size = 0, map_id = 0, g_mode = 0;
+            
+            // State Machine for Multiplayer Host Menu
+            while (step > 0 && step <= 4) {
+                if (step == 1) {
+                    printf(CYAN "Select Board Size (6 or 8) [0 to Go Back]: " RESET);
+                    if (!fgets(input, 256, stdin) || sscanf(input, "%d", &b_size) != 1) continue;
+                    if (b_size == 0) step = 0;
+                    else if (b_size == 6 || b_size == 8) step = 2;
+                    else printf(RED "[!] Invalid size.\n" RESET);
+                }
+                else if (step == 2) {
+                    map_id = getMapChoice(b_size);
+                    if (map_id == 0) step = 1; else step = 3;
+                }
+                else if (step == 3) {
+                    quota = getHintChoice();
+                    if (quota == -2) step = 2; else step = 4;
+                }
+                else if (step == 4) {
+                    printf(CYAN "Select Mode (1 = Co-op, 2 = Versus) [0 to Go Back]: " RESET);
+                    if (!fgets(input, 256, stdin) || sscanf(input, "%d", &g_mode) != 1) continue;
+                    if (g_mode == 0) step = 3;
+                    else if (g_mode == 1 || g_mode == 2) break; // Finished config
+                    else printf(RED "[!] Invalid mode.\n" RESET);
+                }
+            }
+            if (step == 0) continue; // User pressed 0 to exit back to Main Menu
+            
+            hints = quota; used = 0; mistakes = 0;
             char fn[32]; snprintf(fn, 32, "puzzle%d_%d.txt", b_size, map_id);
             if(loadPuzzleFromFile(fn, &size, regs, init, puz, &saved_t, &hints, &quota, &used, &mistakes)) {
                 int net_sock = startServer();
@@ -309,23 +347,29 @@ int main(int argc, char *argv[]) {
                     playGame(size, regs, init, puz, sol, hints, quota, used, mistakes, net_sock, g_mode, ip_pkt.username);
                 }
             }
+            
         } else if (choice == 7) { 
             char ip[64];
-            printf(CYAN "Enter Host IP: " RESET);
-            if (fgets(ip, 64, stdin)) {
-                ip[strcspn(ip, "\n")] = 0; 
-                int net_sock = connectToServer(ip);
-                if (net_sock != -1) {
-                    SyncPacket sp;
-                    if (recv(net_sock, &sp, sizeof(SyncPacket), MSG_WAITALL) > 0) {
-                        sanitize_username(sp.host_username, 32);
-                        InitPacket ip_pkt; strcpy(ip_pkt.username, global_username);
-                        send(net_sock, &ip_pkt, sizeof(InitPacket), 0);
-                        
-                        int sol[MAX][MAX]; memcpy(sol, sp.puzzle, sizeof(sol));
-                        int ts[MAX_REGIONS]; getRegionSizes(sp.size, sp.regions, ts); solveBoard(sp.size, sol, sp.regions, ts);
-                        pthread_mutex_lock(&timer_mutex); elapsed_seconds = 0; pthread_mutex_unlock(&timer_mutex);
-                        playGame(sp.size, sp.regions, sp.initial_puzzle, sp.puzzle, sol, sp.hints_left, sp.initial_hint_quota, 0, 0, net_sock, sp.game_mode, sp.host_username);
+            while(1) {
+                printf(CYAN "Enter Host IP [0 to Go Back]: " RESET);
+                if (fgets(ip, 64, stdin)) {
+                    ip[strcspn(ip, "\n")] = 0; 
+                    if (strcmp(ip, "0") == 0) break; // Exit loop, return to Main Menu
+                    
+                    int net_sock = connectToServer(ip);
+                    if (net_sock != -1) {
+                        SyncPacket sp;
+                        if (recv(net_sock, &sp, sizeof(SyncPacket), MSG_WAITALL) > 0) {
+                            sanitize_username(sp.host_username, 32);
+                            InitPacket ip_pkt; strcpy(ip_pkt.username, global_username);
+                            send(net_sock, &ip_pkt, sizeof(InitPacket), 0);
+                            
+                            int sol[MAX][MAX]; memcpy(sol, sp.puzzle, sizeof(sol));
+                            int ts[MAX_REGIONS]; getRegionSizes(sp.size, sp.regions, ts); solveBoard(sp.size, sol, sp.regions, ts);
+                            pthread_mutex_lock(&timer_mutex); elapsed_seconds = 0; pthread_mutex_unlock(&timer_mutex);
+                            playGame(sp.size, sp.regions, sp.initial_puzzle, sp.puzzle, sol, sp.hints_left, sp.initial_hint_quota, 0, 0, net_sock, sp.game_mode, sp.host_username);
+                        }
+                        break; // End joining session logic after game finishes
                     }
                 }
             }

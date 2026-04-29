@@ -1,7 +1,5 @@
-[test1] Mode: Versus (vs host) - LOSS | Puzzle: 8x8 | Diff: Easy    | Time: 01:24 | Hints: 53 | Mistakes: 22
-[test1] Mode: Versus (vs test2) - WIN | Puzzle: 6x6 | Diff: Easy    | Time: 01:39 | Hints: 36 | Mistakes: 0
-[test3] Mode: Co-op (with test2) | Puzzle: 6x6 | Diff: Easy    | Time: 00:12 | Hints: 0 | Mistakes: 0
-[wwwwwwwwwwwwwwwwwwwwwwwwwwwwwww] Mode: Versus (vs wwwwwwwwwwwwwwwwwwwwwwwwwwwwwww) - LOSS | Puzzle: 6x6 | Diff: Easy    | Time: 29:36 | Hints: 0 | Mistakes: 0
-[dkjqwjdawdnsaojfhawljfdbalsd] Mode: Singleplayer | Puzzle: 6x6 | Diff: Easy    | Time: 01:59 | Hints: 35 | Mistakes: 21
-[1] Mode: Singleplayer | Puzzle: 6x6 | Diff: Easy    | Time: 00:09 | Hints: 25 | Mistakes: 0
-[1] Mode: Singleplayer | Puzzle: 8x8 | Diff: Easy    | Time: 00:09 | Hints: 41 | Mistakes: 0
+[test1] Mode: Singleplayer | Puzzle: 6x6 | Diff: Easy    | Time: 02:49 | Hints: 36 | Mistakes: 3
+[test2] Mode: Co-op (with test1) | Puzzle: 6x6 | Diff: Easy    | Time: 01:06 | Hints: 0 | Mistakes: 0
+[test1] Mode: Co-op (with test2) | Puzzle: 6x6 | Diff: Easy    | Time: 01:06 | Hints: 36 | Mistakes: 0
+[test1] Mode: Versus (vs test2) - WIN | Puzzle: 8x8 | Diff: Easy    | Time: 00:46 | Hints: 56 | Mistakes: 0
+[test2] Mode: Versus (vs test1) - LOSS | Puzzle: 8x8 | Diff: Easy    | Time: 00:46 | Hints: 9 | Mistakes: 0

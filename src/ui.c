@@ -126,9 +126,9 @@ int getMapChoice(int size) {
     char input[256]; int choice;
     while(1) {
         printf(CYAN "\n=====================================\n         SELECT %dx%d MAP           \n=====================================\n" RESET, size, size);
-        printf("1. Map 1\n2. Map 2\n-------------------------------------\nChoice: ");
-        if (fgets(input, sizeof(input), stdin) == NULL) return -1;
-        if (sscanf(input, "%d", &choice) == 1 && (choice == 1 || choice == 2)) return choice;
+        printf("1. Map 1\n2. Map 2\n0. Go Back\n-------------------------------------\nChoice: ");
+        if (fgets(input, sizeof(input), stdin) == NULL) return 0;
+        if (sscanf(input, "%d", &choice) == 1 && (choice >= 0 && choice <= 2)) return choice;
         printf(RED "[!] Invalid choice.\n" RESET);
     }
 }
@@ -137,11 +137,14 @@ int getHintChoice() {
     char input[256]; int choice;
     while(1) {
         printf(CYAN "\n=====================================\n         SELECT DIFFICULTY           \n=====================================\n" RESET);
-        printf("1. Easy (Infinite Hints)\n2. Normal (10 Hints)\n3. Hard (5 Hints)\n4. Extreme (0 Hints)\n-------------------------------------\nChoice: ");
-        if (fgets(input, sizeof(input), stdin) == NULL) return -1;
+        printf("1. Easy (Infinite Hints)\n2. Normal (10 Hints)\n3. Hard (5 Hints)\n4. Extreme (0 Hints)\n0. Go Back\n-------------------------------------\nChoice: ");
+        if (fgets(input, sizeof(input), stdin) == NULL) return -2;
         if (sscanf(input, "%d", &choice) == 1) {
-            if (choice == 1) return -1; if (choice == 2) return 10;
-            if (choice == 3) return 5; if (choice == 4) return 0; 
+            if (choice == 0) return -2; 
+            if (choice == 1) return -1; 
+            if (choice == 2) return 10;
+            if (choice == 3) return 5; 
+            if (choice == 4) return 0; 
         }
         printf(RED "[!] Invalid choice.\n" RESET);
     }
